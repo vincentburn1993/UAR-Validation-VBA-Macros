@@ -1,0 +1,84 @@
+Sub SplitAndCreateWorkbooks()
+    Dim wb As Workbook
+    Dim wsAttestation As Worksheet
+    Dim wsIPE As Worksheet
+    Dim rngFilter As Range
+    Dim cel As Range
+    Dim strUnique As Variant
+    Dim newWb As Workbook
+    Dim newWsAttestation As Worksheet
+    Dim newWsIPE As Worksheet
+    Dim saveFolder As String
+    Dim dict As Object
+    Dim i As Long
+    Dim fileName As String
+    Dim fileNum As Long
+    Dim savePath As String
+    
+    Set wb = ThisWorkbook
+    Set wsAttestation = wb.Sheets("Attestation Report")
+    Set wsIPE = wb.Sheets("IPE")
+    
+    'Specify the folder path to save the new workbooks
+    saveFolder = "INSERT FOLDER PATH HERE"
+    
+    'Create a dictionary to store unique values
+    Set dict = CreateObject("Scripting.Dictionary")
+    
+    'Find unique values in column A and add them to the dictionary
+    For Each cel In wsAttestation.Range("A:A").Cells.SpecialCells(xlCellTypeConstants, 23)
+        If Not dict.Exists(cel.Value) Then
+            dict.Add cel.Value, cel.Value
+        End If
+    Next cel
+    
+    'Loop through the unique values in the dictionary
+    For Each strUnique In dict.Keys
+        'Filter column A based on unique value
+        wsAttestation.UsedRange.AutoFilter 1, strUnique
+        Set rngFilter = wsAttestation.UsedRange.SpecialCells(xlCellTypeVisible)
+        
+        'Create new workbook and copy filtered rows
+        Set newWb = Workbooks.Add
+        Set newWsAttestation = newWb.Sheets(1)
+        newWsAttestation.Name = "Attestation Report"
+        rngFilter.Copy newWsAttestation.Range("A1")
+        
+        'Copy IPE tab to new workbook
+        wsIPE.Copy After:=newWb.Sheets(newWb.Sheets.Count)
+        Set newWsIPE = newWb.Sheets(newWb.Sheets.Count)
+        newWsIPE.Name = "IPE"
+        
+        'Update COUNTIF formula in IPE tab
+        For i = 71 To 109
+            newWsIPE.Range("AC" & i).Formula = "=COUNTIF('Attestation Report'!A:A,IPE!AA" & i & ")"
+        Next i
+        
+        'Generate a valid file name
+        fileName = "(3) FY24 Q1 Attestation Report - " & Replace(strUnique, "/", "_")
+        
+        'Check if the file already exists and generate a unique file name
+        fileNum = 1
+        savePath = saveFolder & fileName & ".xlsx"
+        While Dir(savePath) <> ""
+            fileName = "(3) FY24 Q1 Attestation Report - " & Replace(strUnique, "/", "_") & " (" & fileNum & ")"
+            savePath = saveFolder & fileName & ".xlsx"
+            fileNum = fileNum + 1
+        Wend
+        
+        'Save and label the new workbook in the specified folder
+        On Error Resume Next
+        newWb.SaveAs fileName:=savePath
+        If Err.Number <> 0 Then
+            MsgBox "Error saving the file: " & savePath & vbNewLine & "Error Description: " & Err.Description, vbCritical
+        End If
+        On Error GoTo 0
+        
+        newWb.Close
+    Next strUnique
+    
+    'Remove filters
+    wsAttestation.AutoFilterMode = False
+    
+    MsgBox "Workbooks created successfully!", vbInformation
+End Sub
